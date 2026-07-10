@@ -1,0 +1,12 @@
+{
+  "horizonUrl": "https://horizon-testnet.stellar.org",
+  "rpcUrl": "https://soroban-testnet.stellar.org",
+  "networkPassphrase": "Test SDF Network ; September 2015",
+  "proxy": "",
+  "scTxtPath": "./sc.txt",
+  "inheritableAccountContractId": "",
+  "migrationNotesBatchMaxBytes": 20000,
+  "assets": [
+    { "label": "XLM" }
+  ]
+}

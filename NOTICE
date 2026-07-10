@@ -1,0 +1,80 @@
+Third-Party Software Notices
+============================
+
+This product includes software developed by third parties. The notices
+below are provided for attribution and license compliance. The application
+itself is licensed under the GNU Affero General Public License v3.0 or later
+(see the LICENSE file).
+
+Because this application links the AGPL-licensed recrypt library, distributed
+binaries of InheritableAccountUX must be treated under AGPL terms, including
+source-code availability obligations where AGPL requires them.
+
+
+Rekrypt / recrypt (Proxy Re-Encryption)
+---------------------------------------
+This application uses cryptographic functionality based on:
+
+- recrypt crate (https://github.com/IronCoreLabs/recrypt-rs)
+  License: AGPL-3.0-only
+  Copyright (c) IronCore Labs and contributors
+
+- Rekrypt design patterns (https://github.com/stevenleep/rekrypt)
+  License: see upstream repository
+
+When distributing this software, you must comply with the AGPL license terms
+including source availability for combined works that include recrypt.
+
+
+Stellar JavaScript SDK
+----------------------
+- @stellar/stellar-sdk (https://github.com/stellar/js-stellar-sdk)
+  License: Apache License 2.0
+  Copyright (c) Stellar Development Foundation and contributors
+
+Apache-2.0 requires preservation of copyright, patent, trademark, and
+attribution notices in redistributions. See the upstream package for the full
+license text and any NOTICE file shipped by the SDK.
+
+
+age encryption (JavaScript)
+---------------------------
+- age-encryption (https://github.com/FiloSottile/age / npm: age-encryption)
+  License: BSD-3-Clause
+  Copyright 2023 The age Authors
+
+Redistributions of source or binary form must retain the BSD-3-Clause copyright
+notice, conditions, and disclaimer as required by that license.
+
+
+Tauri
+-----
+- @tauri-apps/api, @tauri-apps/cli, Tauri plugins, and related Rust crates
+  (https://github.com/tauri-apps/tauri)
+  License: Apache-2.0 OR MIT
+  Copyright (c) The Tauri Programme within the Commons Conservancy and contributors
+
+
+React
+-----
+- react, react-dom (https://github.com/facebook/react)
+  License: MIT
+  Copyright (c) Meta Platforms, Inc. and affiliates
+
+
+Other open-source components
+----------------------------
+This project also depends on additional libraries distributed under open-source
+licenses (including MIT, Apache-2.0, BSD, and others), for example:
+
+- buffer (MIT)
+- Vite and @vitejs/plugin-react (MIT)
+- Rust crates listed in src-tauri/Cargo.lock (various licenses)
+
+Full license metadata for JavaScript packages is available in each package under
+node_modules (when installed) and on the corresponding package registries.
+Full license metadata for Rust crates is available via crates.io and the
+locked dependency graph in src-tauri/Cargo.lock.
+
+Nothing in this NOTICE grants you rights to use any third-party trademarks
+except as needed for reasonable and customary attribution.

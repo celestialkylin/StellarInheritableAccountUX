@@ -1,0 +1,25 @@
+[[permission]]
+identifier = "allow-app-core"
+description = "Core application IPC commands (session, config, sc.enc, network)"
+commands.allow = [
+  "unlock_keypair",
+  "clear_session",
+  "get_public_key",
+  "get_signature_hint",
+  "sign_payload",
+  "read_text_file",
+  "read_project_file",
+  "write_text_file",
+  "ensure_directory",
+  "get_app_data_dir",
+  "get_sc_export_default_path",
+  "read_app_data_file",
+  "write_app_data_file",
+  "app_data_file_exists",
+  "http_fetch",
+  "rekrypt_encrypt_note",
+  "rekrypt_decrypt_note",
+  "rekrypt_generate_migration_data",
+  "rekrypt_migrate_note_blob",
+  "rekrypt_public_key_from_address",
+]
