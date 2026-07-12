@@ -66,6 +66,7 @@ where
 {
     let guard = KEYPAIR_STORE.lock().map_err(|_| "lock poisoned".to_string())?;
     let stored = guard.as_ref().ok_or_else(|| "no active session".to_string())?;
-    let sk = StellarSecretKey::from_seed(&stored.seed).map_err(|e| e.to_string())?;
+    // info = None: default HKDF path (unchanged ciphertext compatibility)
+    let sk = StellarSecretKey::from_seed(&stored.seed, None).map_err(|e| e.to_string())?;
     f(&sk)
 }
