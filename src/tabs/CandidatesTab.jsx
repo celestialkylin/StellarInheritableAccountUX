@@ -5,7 +5,7 @@ import {
   addCandidateWithMigration,
   syncCandidateMigrationKeys,
 } from "../services/adminSuccession.js";
-import { hasMigrationData } from "../services/crypto/rekryptMigration.js";
+import { hasMigrationData } from "../services/crypto/notesMigration.js";
 import { bytesToBuffer } from "../services/crypto/codec.js";
 import {
   getCandidate,
@@ -101,7 +101,7 @@ export default function CandidatesTab({ publicKey }) {
         <label>Waiting Time (seconds)</label>
         <input value={newWait} onChange={(e) => setNewWait(e.target.value)} type="number" min="1" />
         <p className="meta">
-          Rekrypt transform key (RK) is generated and stored with the candidate in one transaction.
+          A PRE re-encryption key (admin → candidate) is generated and stored with the candidate in one transaction.
         </p>
         <button
           type="button"
@@ -140,21 +140,21 @@ export default function CandidatesTab({ publicKey }) {
       </div>
 
       <div className="card">
-        <h3>Re-sync Rekrypt Keys</h3>
+        <h3>Re-sync PRE Keys</h3>
         <p className="meta">
-          New candidates receive an RK automatically when added. Use this to rewrite RKs for all
-          registered candidates (e.g. a corrupted key or legacy entries missing migration data).
-          RKs cannot recover the admin decryption key.
+          New candidates receive a re-encryption key automatically when added. Use this to rewrite
+          keys for all registered candidates (e.g. corrupted or missing migration data). A rekey alone
+          cannot open notes without the candidate&apos;s secret key; see README for collusion notes.
         </p>
         <button
           type="button"
           disabled={loading || !data?.items?.length}
           onClick={() => runAction(async () => {
             const result = await syncCandidateMigrationKeys();
-            setSuccess(`Rewrote RKs for ${result.updated} candidate(s). Click Refresh.`);
+            setSuccess(`Rewrote PRE keys for ${result.updated} candidate(s). Click Refresh.`);
           })}
         >
-          Re-sync All RKs
+          Re-sync All PRE Keys
         </button>
       </div>
 

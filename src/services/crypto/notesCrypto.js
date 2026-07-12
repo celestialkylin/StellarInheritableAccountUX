@@ -18,25 +18,24 @@ export function makeSummary(body) {
   return Array.from(firstLine).slice(0, SUMMARY_CHARS).join("");
 }
 
-export async function encryptField(plaintextBytes, recipientAddress = null) {
-  const b64 = await invoke("rekrypt_encrypt_note", {
+export async function encryptField(plaintextBytes) {
+  const b64 = await invoke("encrypt_note", {
     plaintextBase64: toBase64(plaintextBytes),
-    recipientAddress,
   });
   return bufferToContractBytes(fromBase64(b64));
 }
 
 export async function decryptField(ciphertextBytes) {
   const buf = bytesToBuffer(ciphertextBytes);
-  const b64 = await invoke("rekrypt_decrypt_note", {
+  const b64 = await invoke("decrypt_note", {
     blobBase64: toBase64(buf),
   });
   return fromBase64(b64);
 }
 
-export async function encryptNoteText(summary, body, recipientAddress = null) {
-  const encSummary = await encryptField(utf8Encode(summary), recipientAddress);
-  const encBody = await encryptField(utf8Encode(body), recipientAddress);
+export async function encryptNoteText(summary, body) {
+  const encSummary = await encryptField(utf8Encode(summary));
+  const encBody = await encryptField(utf8Encode(body));
   return { summary: encSummary, body: encBody };
 }
 

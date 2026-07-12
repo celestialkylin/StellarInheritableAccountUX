@@ -46,19 +46,27 @@ Treat the encrypted file **and** the password as high-value secrets. Anyone with
 
 ## Encrypted notes
 
-Notes (short summaries and longer bodies) are stored on chain as **ciphertext only**. Encryption and decryption happen in the client.
+Notes (short summaries and longer bodies) are stored on chain as **ciphertext only**. Encryption and decryption use **[StellarRecrypt](https://github.com/celestialkylin/StellarRecrypt)** (proxy re-encryption) in the Tauri client.
+
+**Key model**
+
+- Notes are encrypted to the admin’s **PRE public key** (`pre_pk`), derived via HKDF from their Stellar **`S…` seed**—not from the public `G…` address.
+- Only the holder of that secret can decrypt original note ciphertext.
+- When you add a candidate, the app stores a **re-encryption key** (`migration_data`) on chain: admin `pre_sk` + candidate **`G…`**. A proxy (or the heir’s client) can re-encrypt notes for that heir without learning plaintext; the heir decrypts re-encrypted data with their **`S…`**.
+- After admin transfer / claim, the new admin migrates notes (re-encrypt → decrypt as heir → re-wrap under the new admin’s `pre_pk`).
 
 - **Admin** can create and read notes in the **Notes** tab while controlling the account.
-- When you add a candidate, the app provisions cryptographic setup material so that heir can **already decrypt notes in principle**—without claiming admin and without you staying online.
-- **Claim** is about taking over the account, not about first unlocking note plaintext.
+- Provisioned candidates can **in principle** decrypt notes (with `migration_data` + their secret) without claiming—this UI has no notes viewer in candidate mode.
 - Raw note bytes on the public ledger are not human-readable; privacy depends on encryption, not on hiding data from the network.
 
 **Who can decrypt**
 
 | Party | Can decrypt notes? | In this app |
 |-------|--------------------|-------------|
-| **Admin** | Yes | **Notes** tab: view and edit |
-| **Provisioned candidates** | Yes, in principle (with the setup material stored for them) | **No notes UI** in candidate mode—only succession info and claim. A dedicated candidate client (or a future feature) could offer decrypt/view; the capability is intentional even though this UI does not expose it. |
+| **Admin** | Yes (with their `S…`) | **Notes** tab: view and edit |
+| **Provisioned candidates** | Yes, in principle (`migration_data` + their `S…`) | **No notes UI** in candidate mode—only succession info and claim |
+
+**Collusion note:** This is single-hop PRE. A candidate who holds both the on-chain re-encryption key and their own `S…` can recover the admin’s **note** PRE key (`pre_sk`), not the admin’s signing seed / funds. Treat provisioning an heir as granting note access for that admin epoch.
 
 Anyone can fetch the ciphertext from the network; plaintext is meant for the admin and for **heirs you have already provisioned**.
 
@@ -71,7 +79,7 @@ After unlock as **admin**, the main sections are:
 | **Info** | Current admin, inactivity, candidates, and balances for assets listed in config. |
 | **Operations** | Send assets, and **Contract Method Invoke** (load a contract’s methods, fill arguments, simulate or submit as the inheritable account). |
 | **Signing** | Paste transaction XDR to inspect, sign, simulate, or submit. |
-| **Candidates** | Add, update, or remove heirs; set each waiting time; provision / re-sync Rekrypt transform keys. |
+| **Candidates** | Add, update, or remove heirs; set each waiting time; provision / re-sync PRE re-encryption keys. |
 | **Notes** | List, open, create, and update encrypted notes. |
 
 As a **candidate**, unlock shows your waiting time, current inactivity, time remaining until claim, and a **Claim Admin** action when the threshold is met.
@@ -139,6 +147,6 @@ See the [`LICENSE`](LICENSE) file, or <https://www.gnu.org/licenses/>.
 
 ## Third-party software
 
-This application incorporates open-source components, including **recrypt** (AGPL; proxy re-encryption), the **Stellar** JavaScript SDK (Apache-2.0), **age-encryption** (BSD-3-Clause), **Tauri** (Apache-2.0 OR MIT), and **React** (MIT).
+This application incorporates open-source components, including **[StellarRecrypt](https://github.com/celestialkylin/StellarRecrypt)** (MIT OR Apache-2.0; proxy re-encryption), the **Stellar** JavaScript SDK (Apache-2.0), **age-encryption** (BSD-3-Clause), **Tauri** (Apache-2.0 OR MIT), and **React** (MIT).
 
 Attribution and compliance notes are collected in [`NOTICE`](NOTICE). Full license texts for individual packages are available from their upstream projects and, when installed, from package metadata and `src-tauri/Cargo.lock`.

@@ -6,24 +6,16 @@ below are provided for attribution and license compliance. The application
 itself is licensed under the GNU Affero General Public License v3.0 or later
 (see the LICENSE file).
 
-Because this application links the AGPL-licensed recrypt library, distributed
-binaries of InheritableAccountUX must be treated under AGPL terms, including
-source-code availability obligations where AGPL requires them.
 
+StellarRecrypt (Proxy Re-Encryption)
+------------------------------------
+This application uses:
 
-Rekrypt / recrypt (Proxy Re-Encryption)
----------------------------------------
-This application uses cryptographic functionality based on:
+- stellar_recrypt (https://github.com/celestialkylin/StellarRecrypt)
+  License: MIT OR Apache-2.0
+  Copyright (c) 2026 Cele.Kln
 
-- recrypt crate (https://github.com/IronCoreLabs/recrypt-rs)
-  License: AGPL-3.0-only
-  Copyright (c) IronCore Labs and contributors
-
-- Rekrypt design patterns (https://github.com/stevenleep/rekrypt)
-  License: see upstream repository
-
-When distributing this software, you must comply with the AGPL license terms
-including source availability for combined works that include recrypt.
+Fetched as a Cargo git dependency during build (see src-tauri/Cargo.toml).
 
 
 Stellar JavaScript SDK

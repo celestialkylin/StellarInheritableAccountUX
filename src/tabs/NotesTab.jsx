@@ -6,7 +6,7 @@ import {
   decryptNoteField,
   encryptNoteText,
   makeSummary,
-} from "../services/crypto/rekryptNotes.js";
+} from "../services/crypto/notesCrypto.js";
 import { getNoteBody, listNoteSummaries, updateNotes } from "../services/stellar/notes.js";
 
 const MAX_BODY_BYTES = 64 * 1024;

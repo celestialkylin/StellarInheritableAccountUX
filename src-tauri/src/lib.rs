@@ -1,6 +1,6 @@
 mod commands;
 mod keypair_store;
-mod rekrypt_ops;
+mod notes_crypto;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -24,11 +24,10 @@ pub fn run() {
             commands::write_app_data_file,
             commands::app_data_file_exists,
             commands::http_fetch,
-            commands::rekrypt_encrypt_note,
-            commands::rekrypt_decrypt_note,
-            commands::rekrypt_generate_migration_data,
-            commands::rekrypt_migrate_note_blob,
-            commands::rekrypt_public_key_from_address,
+            commands::encrypt_note,
+            commands::decrypt_note,
+            commands::generate_note_migration_data,
+            commands::migrate_note_blob,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -17,9 +17,8 @@ commands.allow = [
   "write_app_data_file",
   "app_data_file_exists",
   "http_fetch",
-  "rekrypt_encrypt_note",
-  "rekrypt_decrypt_note",
-  "rekrypt_generate_migration_data",
-  "rekrypt_migrate_note_blob",
-  "rekrypt_public_key_from_address",
+  "encrypt_note",
+  "decrypt_note",
+  "generate_note_migration_data",
+  "migrate_note_blob",
 ]

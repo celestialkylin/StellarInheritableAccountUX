@@ -8,8 +8,8 @@ import {
 import {
   encodeMigrationData,
   migrateEncryptedField,
-} from "./crypto/rekryptMigration.js";
-import { decryptField } from "./crypto/rekryptNotes.js";
+} from "./crypto/notesMigration.js";
+import { decryptField } from "./crypto/notesCrypto.js";
 import { getSessionKeypair } from "./session.js";
 import { addCandidate, updateCandidatesMigrationData } from "./stellar/candidates.js";
 import {

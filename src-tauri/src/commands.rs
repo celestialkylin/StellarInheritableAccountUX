@@ -1,5 +1,5 @@
 use crate::keypair_store;
-use crate::rekrypt_ops;
+use crate::notes_crypto;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use std::fs;
 use std::path::PathBuf;
@@ -210,56 +210,38 @@ pub async fn http_fetch(
     })
 }
 
-fn session_public_key() -> Result<String, String> {
-    keypair_store::public_key().ok_or_else(|| "no active session".to_string())
-}
-
 #[tauri::command]
-pub fn rekrypt_encrypt_note(plaintext_base64: String, recipient_address: Option<String>) -> Result<String, String> {
-    let owner = session_public_key()?;
-    let recipient = recipient_address
-        .filter(|a| !a.trim().is_empty())
-        .unwrap_or_else(|| owner.clone());
+pub fn encrypt_note(plaintext_base64: String) -> Result<String, String> {
     let plaintext = STANDARD
         .decode(plaintext_base64.trim())
         .map_err(|e| e.to_string())?;
-    let blob = rekrypt_ops::encrypt_note_field(&owner, &recipient, &plaintext)?;
+    let blob = notes_crypto::encrypt_note(&plaintext)?;
     Ok(STANDARD.encode(blob))
 }
 
 #[tauri::command]
-pub fn rekrypt_decrypt_note(blob_base64: String) -> Result<String, String> {
-    let owner = session_public_key()?;
+pub fn decrypt_note(blob_base64: String) -> Result<String, String> {
     let blob = STANDARD
         .decode(blob_base64.trim())
         .map_err(|e| e.to_string())?;
-    let plaintext = rekrypt_ops::decrypt_note_field(&owner, &blob)?;
+    let plaintext = notes_crypto::decrypt_note(&blob)?;
     Ok(STANDARD.encode(plaintext))
 }
 
 #[tauri::command]
-pub fn rekrypt_generate_migration_data(candidate_address: String) -> Result<String, String> {
-    let admin = session_public_key()?;
-    let migration = rekrypt_ops::generate_migration_data(&admin, candidate_address.trim())?;
+pub fn generate_note_migration_data(candidate_address: String) -> Result<String, String> {
+    let migration = notes_crypto::generate_migration_data(candidate_address.trim())?;
     Ok(STANDARD.encode(migration))
 }
 
 #[tauri::command]
-pub fn rekrypt_migrate_note_blob(blob_base64: String, migration_data_base64: String) -> Result<String, String> {
-    let new_admin = session_public_key()?;
+pub fn migrate_note_blob(blob_base64: String, migration_data_base64: String) -> Result<String, String> {
     let blob = STANDARD.decode(blob_base64.trim()).map_err(|e| e.to_string())?;
     let migration = STANDARD
         .decode(migration_data_base64.trim())
         .map_err(|e| e.to_string())?;
-    let (_delegate_pub, transform_key) = rekrypt_ops::parse_migration_data(&migration)?;
-    let new_blob = rekrypt_ops::migrate_note_blob(&new_admin, &blob, &transform_key)?;
+    let new_blob = notes_crypto::migrate_note_blob(&blob, &migration)?;
     Ok(STANDARD.encode(new_blob))
-}
-
-#[tauri::command]
-pub fn rekrypt_public_key_from_address(address: String) -> Result<String, String> {
-    let pub_bytes = rekrypt_ops::derive_rekrypt_public_from_address(address.trim())?;
-    Ok(STANDARD.encode(pub_bytes))
 }
 
 #[derive(serde::Serialize)]
