@@ -127,10 +127,14 @@ mod tests {
         keypair_store::unlock(&s).expect("unlock");
     }
 
+    fn test_info() -> Vec<u8> {
+        keypair_store::notes_pre_info()
+    }
+
     #[test]
     fn encrypt_decrypt_roundtrip() {
         with_exclusive_session(|| {
-            let admin = StellarKeyPair::generate(&mut OsRng);
+            let admin = StellarKeyPair::generate(&mut OsRng, &test_info());
             unlock_keypair(&admin);
             let plaintext = b"Hello inheritable notes";
             let blob = encrypt_note(plaintext).expect("encrypt");
@@ -142,8 +146,9 @@ mod tests {
     #[test]
     fn pre_migration_roundtrip() {
         with_exclusive_session(|| {
-            let admin = StellarKeyPair::generate(&mut OsRng);
-            let candidate = StellarKeyPair::generate(&mut OsRng);
+            let info = test_info();
+            let admin = StellarKeyPair::generate(&mut OsRng, &info);
+            let candidate = StellarKeyPair::generate(&mut OsRng, &info);
             let plaintext = b"Secret note body";
 
             unlock_keypair(&admin);
@@ -161,8 +166,9 @@ mod tests {
     #[test]
     fn wrong_session_fails_decrypt() {
         with_exclusive_session(|| {
-            let admin = StellarKeyPair::generate(&mut OsRng);
-            let eve = StellarKeyPair::generate(&mut OsRng);
+            let info = test_info();
+            let admin = StellarKeyPair::generate(&mut OsRng, &info);
+            let eve = StellarKeyPair::generate(&mut OsRng, &info);
             unlock_keypair(&admin);
             let blob = encrypt_note(b"secret").expect("encrypt");
             unlock_keypair(&eve);
@@ -173,7 +179,7 @@ mod tests {
     #[test]
     fn rejects_unsupported_note_version() {
         with_exclusive_session(|| {
-            let admin = StellarKeyPair::generate(&mut OsRng);
+            let admin = StellarKeyPair::generate(&mut OsRng, &test_info());
             unlock_keypair(&admin);
             let mut blob = encrypt_note(b"x").expect("encrypt");
             blob[0] = 2;
@@ -184,8 +190,9 @@ mod tests {
     #[test]
     fn migration_data_layout() {
         with_exclusive_session(|| {
-            let admin = StellarKeyPair::generate(&mut OsRng);
-            let candidate = StellarKeyPair::generate(&mut OsRng);
+            let info = test_info();
+            let admin = StellarKeyPair::generate(&mut OsRng, &info);
+            let candidate = StellarKeyPair::generate(&mut OsRng, &info);
             unlock_keypair(&admin);
             let migration =
                 generate_migration_data(&candidate.stellar_public.to_strkey()).expect("migration");

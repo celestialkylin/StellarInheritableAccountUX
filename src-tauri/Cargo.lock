@@ -3677,7 +3677,7 @@ dependencies = [
 [[package]]
 name = "stellar_recrypt"
 version = "0.1.0"
-source = "git+https://github.com/celestialkylin/StellarRecrypt?branch=main#04f32c1116a534e7317da25c75235535e7423c88"
+source = "git+https://github.com/celestialkylin/StellarRecrypt?branch=main#48f93fb8c21c2a48dcc97c6eca124bdaa1e9d326"
 dependencies = [
  "chacha20poly1305",
  "curve25519-dalek",

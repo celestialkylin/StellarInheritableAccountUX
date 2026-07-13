@@ -1,9 +1,14 @@
 use ed25519_dalek::{Signer, SigningKey};
 use once_cell::sync::Lazy;
-use stellar_recrypt::StellarSecretKey;
+use stellar_recrypt::{structured_info, StellarSecretKey};
 use stellar_strkey::ed25519::{PrivateKey, PublicKey};
 use std::sync::Mutex;
 use zeroize::{Zeroize, ZeroizeOnDrop};
+
+/// App-scoped PRE domain for notes (purpose only; no peer).
+pub(crate) fn notes_pre_info() -> Vec<u8> {
+    structured_info(b"inheritable-account-ux/notes-v1", &[])
+}
 
 #[derive(Zeroize, ZeroizeOnDrop)]
 struct StoredKey {
@@ -66,7 +71,7 @@ where
 {
     let guard = KEYPAIR_STORE.lock().map_err(|_| "lock poisoned".to_string())?;
     let stored = guard.as_ref().ok_or_else(|| "no active session".to_string())?;
-    // info = None: default HKDF path (unchanged ciphertext compatibility)
-    let sk = StellarSecretKey::from_seed(&stored.seed, None).map_err(|e| e.to_string())?;
+    let info = notes_pre_info();
+    let sk = StellarSecretKey::from_seed(&stored.seed, &info).map_err(|e| e.to_string())?;
     f(&sk)
 }
