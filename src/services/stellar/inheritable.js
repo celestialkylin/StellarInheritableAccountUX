@@ -83,3 +83,14 @@ export function finishAdminMigration(publicKey) {
     parseResultXdr: scValToNative,
   });
 }
+
+/** Admin-only: update LastActivity without other side effects. */
+export function checkIn(publicKey) {
+  return submitContractCall({
+    contractId: getContext().contractId,
+    method: "check_in",
+    args: [],
+    publicKey,
+    parseResultXdr: scValToNative,
+  });
+}

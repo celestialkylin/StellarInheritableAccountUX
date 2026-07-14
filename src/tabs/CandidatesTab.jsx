@@ -14,13 +14,9 @@ import {
   updateCandidate,
 } from "../services/stellar/candidates.js";
 import { getInactiveTime } from "../services/stellar/inheritable.js";
+import { formatDuration, SECONDS_PER_YEAR } from "../utils/formatDuration.js";
 
-function formatDuration(seconds) {
-  const s = Number(seconds);
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
-}
+const DEFAULT_WAITING_TIME = String(SECONDS_PER_YEAR);
 
 async function fetchCandidatesData() {
   const [addrs, inactiveTime] = await Promise.all([
@@ -51,9 +47,9 @@ export default function CandidatesTab({ publicKey }) {
   const [success, setSuccess] = useState("");
 
   const [newAddr, setNewAddr] = useState("");
-  const [newWait, setNewWait] = useState("86400");
+  const [newWait, setNewWait] = useState(DEFAULT_WAITING_TIME);
   const [editAddr, setEditAddr] = useState("");
-  const [editWait, setEditWait] = useState("86400");
+  const [editWait, setEditWait] = useState(DEFAULT_WAITING_TIME);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -122,7 +118,19 @@ export default function CandidatesTab({ publicKey }) {
       <div className="card">
         <h3>Update Candidate</h3>
         <label>Candidate</label>
-        <select value={editAddr} onChange={(e) => setEditAddr(e.target.value)}>
+        <select
+          value={editAddr}
+          onChange={(e) => {
+            const addr = e.target.value;
+            setEditAddr(addr);
+            if (!addr) {
+              setEditWait(DEFAULT_WAITING_TIME);
+              return;
+            }
+            const item = data?.items?.find((c) => c.address === addr);
+            if (item != null) setEditWait(String(item.waitingTime));
+          }}
+        >
           <option value="">— select —</option>
           {data?.items?.map((c) => (
             <option key={c.address} value={c.address}>{c.address}</option>

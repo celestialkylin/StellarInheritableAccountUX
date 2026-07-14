@@ -13,6 +13,7 @@ import {
   migrationNeedsNotes,
 } from "../services/crypto/migrationStatus.js";
 import {
+  checkIn,
   getAdmin,
   getCandidate,
   getInactiveTime,
@@ -26,14 +27,7 @@ import {
   getDecimals,
   resolveTokenRef,
 } from "../services/stellar/sep41.js";
-
-function formatDuration(seconds) {
-  const s = Number(seconds);
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
-  return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
-}
+import { formatDuration } from "../utils/formatDuration.js";
 
 function formatTimestamp(ts) {
   return new Date(Number(ts) * 1000).toLocaleString();
@@ -159,7 +153,29 @@ export default function InfoTab({ publicKey }) {
             <h3>Activity</h3>
             <p><strong>Admin:</strong> {data.admin}</p>
             <p><strong>Last activity:</strong> {formatTimestamp(data.lastActivity)}</p>
-            <p><strong>Inactive time:</strong> {formatDuration(displayInactive)}</p>
+            <p>
+              <strong>Inactive time:</strong> {formatDuration(displayInactive)}{" "}
+              <button
+                type="button"
+                disabled={loading}
+                onClick={async () => {
+                  setLoading(true);
+                  setError("");
+                  setSuccess("");
+                  try {
+                    await checkIn(publicKey);
+                    setSuccess("Check-in submitted. Last activity updated.");
+                    await refresh();
+                  } catch (e) {
+                    setError(e.message || String(e));
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+              >
+                Check In
+              </button>
+            </p>
           </div>
 
           <div className="card">

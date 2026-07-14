@@ -19,14 +19,7 @@ import {
   getCandidate,
   getInactiveTime,
 } from "../services/stellar/inheritable.js";
-
-function formatDuration(seconds) {
-  const s = Number(seconds);
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
-}
+import { formatDuration } from "../utils/formatDuration.js";
 
 export default function UnlockPage({ config, onUnlocked, scContent, scSource, onScResolved }) {
   const [password, setPassword] = useState("");
