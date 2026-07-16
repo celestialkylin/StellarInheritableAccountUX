@@ -121,7 +121,7 @@ export default function SigningTab({ publicKey }) {
           <p className="meta next-step-hint">
             Next step: <strong>{info.nextStepLabel}</strong>
             {info.phase === "needs_simulate" && " — fill footprint & auth via RPC simulate"}
-            {info.phase === "needs_sign_auth" && " — wrap CAP-71 delegate and sign C/admin auth"}
+            {info.phase === "needs_sign_auth" && " — wrap CAP-71 and sign admin delegate"}
             {info.phase === "needs_sign_envelope" && " — sign the transaction envelope with admin"}
             {info.phase === "ready_submit" && " — broadcast to the network"}
           </p>
@@ -146,7 +146,7 @@ export default function SigningTab({ publicKey }) {
               onClick={() =>
                 run(
                   () => signAuthTxXdr(xdr),
-                  "Auth signed (wrap + C/admin) — XDR updated. Simulate was not run.",
+                  "Auth signed (wrap + admin delegate) — XDR updated. Simulate was not run.",
                 )
               }
             >

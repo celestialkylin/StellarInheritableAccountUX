@@ -268,7 +268,7 @@ export function inspectTxXdr(xdrBase64) {
       showReSimulate: Boolean(simulated) && phase !== "needs_simulate",
       showSignAuth: phase === "needs_sign_auth",
       signAuthLabel: involvesCOrAdmin
-        ? "Sign Auth (C + Admin)"
+        ? "Sign Auth (Admin delegate)"
         : "Sign Auth",
       showSignEnvelope:
         phase === "needs_sign_envelope" ||
@@ -393,7 +393,7 @@ export async function simulateTxXdr(xdrBase64) {
 }
 
 /**
- * CAP-71 wrap + sign InheritableAccount root and admin delegate only.
+ * CAP-71 wrap + sign admin delegate only (InheritableAccount root stays Void).
  * Does NOT call simulate — user runs Simulate separately.
  */
 export async function signAuthTxXdr(xdrBase64) {
@@ -428,7 +428,6 @@ export async function signAuthTxXdr(xdrBase64) {
 
   const authEntries = getInvokeHostFunctionAuth(tx);
   const signOpts = {
-    contractAccountId,
     keypair,
     expiration,
     networkPassphrase: config.networkPassphrase,
@@ -440,9 +439,9 @@ export async function signAuthTxXdr(xdrBase64) {
         `Auth requires ${address} but the session key is ${adminAddress}. Unlock the matching admin account.`,
       );
     }
-    if (address.startsWith("C") && address !== contractAccountId) {
+    if (address.startsWith("C")) {
       throw new Error(
-        `Auth requires contract account ${address}; this workbench only signs InheritableAccount (${contractAccountId}).`,
+        `Auth still requires contract account ${address}; pure-delegation expects only the admin delegate after CAP-71 wrap.`,
       );
     }
 

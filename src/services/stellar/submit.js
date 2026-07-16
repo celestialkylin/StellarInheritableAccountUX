@@ -2,11 +2,7 @@ import {
   Address,
   authorizeEntry,
   BASE_FEE,
-  buildAuthorizationEntryPreimage,
   buildWithDelegatesEntry,
-  hash,
-  nativeToScVal,
-  StrKey,
   TransactionBuilder,
 } from "@stellar/stellar-sdk";
 import { AssembledTransaction } from "@stellar/stellar-sdk/contract";
@@ -149,14 +145,31 @@ export function collectAuthSubjects(txOrBuilt, { unsignedOnly = true } = {}) {
       case "sorobanCredentialsAddressWithDelegates": {
         const withDelegates = credentials.addressWithDelegates();
         const root = withDelegates.addressCredentials();
-        addAuthNode(
-          subjects,
-          seen,
-          entryIndex,
-          Address.fromScAddress(root.address()).toString(),
-          root.signature(),
-          { unsignedOnly },
-        );
+        const rootAddr = Address.fromScAddress(root.address()).toString();
+        // CAP-71 pure-delegation custom accounts (InheritableAccount): root
+        // signature stays Void — only delegates need signatures.
+        if (rootAddr.startsWith("C")) {
+          if (!unsignedOnly) {
+            const key = `${entryIndex}:${rootAddr}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              subjects.push({
+                entryIndex,
+                address: rootAddr,
+                signed: true, // Void is the expected final root signature
+              });
+            }
+          }
+        } else {
+          addAuthNode(
+            subjects,
+            seen,
+            entryIndex,
+            rootAddr,
+            root.signature(),
+            { unsignedOnly },
+          );
+        }
         walkDelegates(entryIndex, withDelegates.delegates());
         break;
       }
@@ -203,81 +216,27 @@ export function wrapContractAccountDelegates(txOrBuilt, contractAccountId, admin
   }
 }
 
-/** InheritableAccount __check_auth expects AccSignature: Map{public_key, signature}. */
-export function customAccountSignatureScVal(publicKey, signatureBytes) {
-  return nativeToScVal(
-    {
-      public_key: StrKey.decodeEd25519PublicKey(publicKey),
-      signature: signatureBytes,
-    },
-    {
-      type: {
-        public_key: ["symbol", "bytes"],
-        signature: ["symbol", "bytes"],
-      },
-    },
-  );
-}
-
-export function setSignatureOnNode(entry, forAddress, signatureScVal) {
-  const credentials = entry.credentials();
-  if (credentials.switch().name !== "sorobanCredentialsAddressWithDelegates") {
-    throw new Error(
-      `expected AddressWithDelegates credentials, got ${credentials.switch().name}`,
-    );
-  }
-
-  const withDelegates = credentials.addressWithDelegates();
-  const rootAddress = Address.fromScAddress(
-    withDelegates.addressCredentials().address(),
-  ).toString();
-
-  if (forAddress === rootAddress) {
-    withDelegates.addressCredentials().signature(signatureScVal);
-    return entry;
-  }
-
-  const walk = (delegates) => {
-    for (const delegate of delegates) {
-      const addr = Address.fromScAddress(delegate.address()).toString();
-      if (addr === forAddress) {
-        delegate.signature(signatureScVal);
-        return true;
-      }
-      if (walk(delegate.nestedDelegates())) return true;
-    }
-    return false;
-  };
-
-  if (!walk(withDelegates.delegates())) {
-    throw new Error(`authorization entry has no credential node for address ${forAddress}`);
-  }
-
-  return entry;
-}
-
-export async function signCustomAccountRoot(entry, contractAccountId, keypair, expiration, networkPassphrase) {
-  const preimage = buildAuthorizationEntryPreimage(entry, expiration, networkPassphrase);
-  const payload = hash(preimage.toXDR());
-  const signatureBytes = keypair.sign(payload);
-  const signatureScVal = customAccountSignatureScVal(keypair.publicKey(), signatureBytes);
-  return setSignatureOnNode(entry, contractAccountId, signatureScVal);
-}
-
+/**
+ * Sign one auth credential node (admin G-account or other non-pure-delegation address).
+ * Pure-delegation C-account roots keep Void and are never signed here.
+ */
 export async function signAuthNode(
   entry,
   forAddress,
-  { contractAccountId, keypair, expiration, networkPassphrase },
+  { keypair, expiration, networkPassphrase },
 ) {
-  if (forAddress === contractAccountId) {
-    return signCustomAccountRoot(entry, contractAccountId, keypair, expiration, networkPassphrase);
+  if (forAddress.startsWith("C")) {
+    throw new Error(
+      `Pure-delegation custom account ${forAddress} does not take a root signature; sign the admin delegate only.`,
+    );
   }
-
   return authorizeEntry(entry, keypair, expiration, networkPassphrase, forAddress);
 }
 
 /**
  * Multi-round auth signing for AssembledTransaction (mutates tx.built auth, re-simulates).
+ * Wraps C-account roots as CAP-71 WithDelegates, then signs admin delegate only
+ * (InheritableAccount root signature stays Void).
  */
 export async function signAllRequiredAuthEntries(tx, { contractAccountId, adminAddress }) {
   const { config } = getContext();
@@ -299,7 +258,6 @@ export async function signAllRequiredAuthEntries(tx, { contractAccountId, adminA
 
     const authEntries = getInvokeHostFunctionAuth(tx);
     const signOpts = {
-      contractAccountId,
       keypair,
       expiration,
       networkPassphrase: config.networkPassphrase,
@@ -400,7 +358,7 @@ export async function buildSimulatedTx({
 }
 
 /**
- * simulate → wrap delegate tree → sign C root + admin delegate → enforce simulate → send
+ * simulate → wrap CAP-71 delegate tree → sign admin delegate only → send
  */
 export async function signAndSubmitTx(tx, { authContractId } = {}) {
   const { config } = getContext();
