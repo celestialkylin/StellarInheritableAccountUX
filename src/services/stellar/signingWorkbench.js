@@ -505,11 +505,15 @@ export async function submitTxXdr(xdrBase64) {
     // eslint-disable-next-line no-await-in-loop
     last = await rpc.getTransaction(hash);
     if (last.status === Api.GetTransactionStatus.SUCCESS) {
+      const { text: returnValueText, native: returnValue } = formatSimReturnValue({
+        returnValue: last.returnValue ?? null,
+      });
       return {
         hash,
         status: "SUCCESS",
         resultXdr: last.resultXdr ?? null,
-        returnValue: last.returnValue ?? null,
+        returnValue,
+        returnValueText,
         networkPassphrase: config.networkPassphrase,
       };
     }

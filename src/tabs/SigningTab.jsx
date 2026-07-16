@@ -52,9 +52,11 @@ export default function SigningTab({ publicKey }) {
       if (typeof next === "string") {
         setXdr(next);
         if (okMessage) setSuccess(okMessage);
-      } else if (next && typeof next === "object" && typeof next.xdr === "string") {
-        // e.g. simulate / re-sim: { xdr, returnValueText }
-        setXdr(next.xdr);
+      } else if (next && typeof next === "object") {
+        // simulate / re-sim: { xdr, returnValueText }; submit: { hash, returnValueText, … }
+        if (typeof next.xdr === "string") {
+          setXdr(next.xdr);
+        }
         const base = typeof okMessage === "function" ? okMessage(next) : okMessage;
         const rv =
           next.returnValueText != null
@@ -170,17 +172,15 @@ export default function SigningTab({ publicKey }) {
               type="button"
               disabled={busy}
               onClick={() =>
-                run(async () => {
-                  const result = await submitTxXdr(xdr);
-                  setSuccess(
+                run(
+                  () => submitTxXdr(xdr),
+                  (result) =>
                     result.status === "SUCCESS"
                       ? `Submitted successfully.\nHash: ${result.hash}`
                       : `Submitted (${result.status}).\nHash: ${result.hash}${
                           result.message ? `\n${result.message}` : ""
                         }`,
-                  );
-                  return null;
-                })
+                )
               }
             >
               {busy ? "Working…" : "Submit to Network"}
