@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import RefreshBar from "../components/RefreshBar.jsx";
 import MissingMigrationDataBanner from "../components/MissingMigrationDataBanner.jsx";
-import { getCache, getCacheMeta, setCache } from "../services/cache.js";
+import { setCache, useCacheState } from "../services/cache.js";
 import { getContext } from "../services/stellar/context.js";
 import {
   candidatesMissingMigrationData,
@@ -10,15 +10,12 @@ import {
   readAdminMigrationState,
 } from "../services/adminSuccession.js";
 import { migrationInProgress } from "../services/crypto/migrationStatus.js";
-import { hasMigrationData } from "../services/crypto/notesMigration.js";
-import { bytesToBuffer } from "../services/crypto/codec.js";
+import { fetchCandidatesData } from "../services/stellar/candidatesList.js";
 import {
   checkIn,
   getAdmin,
-  getCandidate,
   getInactiveTime,
   getLastActivity,
-  listCandidates,
   setAdmin,
 } from "../services/stellar/inheritable.js";
 import {
@@ -33,48 +30,34 @@ function formatTimestamp(ts) {
   return new Date(Number(ts) * 1000).toLocaleString();
 }
 
-async function fetchInfoData() {
+async function fetchInfoOnlyData() {
   const { config, contractId } = getContext();
-  const [admin, lastActivity, inactiveTime, candidateAddrs] = await Promise.all([
+  const [admin, lastActivity, inactiveTime, balances] = await Promise.all([
     getAdmin(),
     getLastActivity(),
     getInactiveTime(),
-    listCandidates(),
+    Promise.all(
+      config.assets.map(async (asset) => {
+        const tokenRef = resolveTokenRef(asset, config.networkPassphrase);
+        const decimals = await getDecimals(tokenRef);
+        const raw = await getBalance(tokenRef, contractId);
+        return {
+          label: tokenRef.label,
+          amount: formatAmount(raw, decimals),
+          contractId: tokenRef.contractId,
+        };
+      }),
+    ),
   ]);
 
-  const candidates = await Promise.all(
-    candidateAddrs.map(async (addr) => {
-      const info = await getCandidate(addr);
-      const remaining = Math.max(0, Number(info.waiting_time) - Number(inactiveTime));
-      const hasPreKey = hasMigrationData(bytesToBuffer(info.migration_data));
-      return {
-        address: addr,
-        waitingTime: info.waiting_time,
-        remaining,
-        hasPreKey,
-      };
-    }),
-  );
-
-  const balances = await Promise.all(
-    config.assets.map(async (asset) => {
-      const tokenRef = resolveTokenRef(asset, config.networkPassphrase);
-      const decimals = await getDecimals(tokenRef);
-      const raw = await getBalance(tokenRef, contractId);
-      return {
-        label: tokenRef.label,
-        amount: formatAmount(raw, decimals),
-        contractId: tokenRef.contractId,
-      };
-    }),
-  );
-
-  return { admin, lastActivity, inactiveTime, candidates, balances };
+  return { admin, lastActivity, inactiveTime, balances };
 }
 
 export default function InfoTab({ publicKey, onGoToCandidates, isActive = true }) {
-  const [data, setData] = useState(() => getCache("info"));
-  const [meta, setMeta] = useState(() => getCacheMeta("info"));
+  const [data, meta] = useCacheState("info");
+  const [candidatesData] = useCacheState("candidates");
+  const candidates = candidatesData?.items ?? [];
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -86,17 +69,17 @@ export default function InfoTab({ publicKey, onGoToCandidates, isActive = true }
     setLoading(true);
     setError("");
     try {
-      const [fetched, migrationStatus] = await Promise.all([
-        fetchInfoData(),
+      const [fetched, migrationStatus, candidatesFetched] = await Promise.all([
+        fetchInfoOnlyData(),
         readAdminMigrationState(),
+        fetchCandidatesData(),
       ]);
       setCache("info", fetched);
-      setData(fetched);
-      setMeta(getCacheMeta("info"));
+      setCache("candidates", candidatesFetched);
       setDisplayInactive(fetched.inactiveTime);
       setMigrationPhase(migrationStatus.phase);
       setTransferAddr((prev) =>
-        prev && !fetched.candidates.some((c) => c.address === prev) ? "" : prev,
+        prev && !candidatesFetched.items.some((c) => c.address === prev) ? "" : prev,
       );
     } catch (e) {
       setError(e.message || String(e));
@@ -105,10 +88,11 @@ export default function InfoTab({ publicKey, onGoToCandidates, isActive = true }
     }
   }, []);
 
-  // Home after unlock and when returning to Info: re-check empty migration_data banner.
+  // First open / after invalidateCache("info"): load when active and not loaded.
+  // Tab switches while loaded do not re-fetch. Candidates stay in shared cache.
   useEffect(() => {
-    if (isActive) refresh();
-  }, [isActive, refresh]);
+    if (isActive && !meta.loaded) refresh();
+  }, [isActive, meta.loaded, refresh]);
 
   useEffect(() => {
     if (!data?.lastActivity) return;
@@ -121,19 +105,24 @@ export default function InfoTab({ publicKey, onGoToCandidates, isActive = true }
     return () => clearInterval(timer);
   }, [data, meta.fetchedAt]);
 
+  // Keep transfer select valid if shared candidates list changes (e.g. remove on Candidates tab).
+  useEffect(() => {
+    setTransferAddr((prev) =>
+      prev && !candidates.some((c) => c.address === prev) ? "" : prev,
+    );
+  }, [candidates]);
+
   const selectedCandidate = useMemo(() => {
-    if (!transferAddr || !data?.candidates) return null;
-    return data.candidates.find((c) => c.address === transferAddr) ?? null;
-  }, [transferAddr, data?.candidates]);
+    if (!transferAddr) return null;
+    return candidates.find((c) => c.address === transferAddr) ?? null;
+  }, [transferAddr, candidates]);
 
   const transferBlockedNoPre =
     Boolean(selectedCandidate) && !selectedCandidate.hasPreKey;
   const canTransfer =
     Boolean(selectedCandidate?.hasPreKey) && !loading;
 
-  const showMissingMigrationBanner = candidatesMissingMigrationData(
-    data?.candidates ?? [],
-  );
+  const showMissingMigrationBanner = candidatesMissingMigrationData(candidates);
 
   return (
     <div>
@@ -225,7 +214,7 @@ export default function InfoTab({ publicKey, onGoToCandidates, isActive = true }
 
           <div className="card">
             <h3>Candidates</h3>
-            {data.candidates.length === 0 ? (
+            {candidates.length === 0 ? (
               <p className="meta">No candidates registered.</p>
             ) : (
               <table>
@@ -238,7 +227,7 @@ export default function InfoTab({ publicKey, onGoToCandidates, isActive = true }
                   </tr>
                 </thead>
                 <tbody>
-                  {data.candidates.map((c) => (
+                  {candidates.map((c) => (
                     <tr key={c.address}>
                       <td>{c.address}</td>
                       <td>{formatDuration(c.waitingTime)}</td>
@@ -271,10 +260,10 @@ export default function InfoTab({ publicKey, onGoToCandidates, isActive = true }
             <select
               value={transferAddr}
               onChange={(e) => setTransferAddr(e.target.value)}
-              disabled={loading || data.candidates.length === 0}
+              disabled={loading || candidates.length === 0}
             >
               <option value="">— select candidate —</option>
-              {data.candidates.map((c) => (
+              {candidates.map((c) => (
                 <option key={c.address} value={c.address}>
                   {c.address}
                   {c.hasPreKey ? " (PRE set)" : " (no PRE)"}
@@ -313,6 +302,17 @@ export default function InfoTab({ publicKey, onGoToCandidates, isActive = true }
                     "Admin transfer submitted. New admin should complete note migration after unlock.",
                   );
                   setTransferAddr("");
+                  // Admin + PRE status change on-chain; update shared caches for both tabs.
+                  const [infoFetched, migrationStatus, candidatesFetched] =
+                    await Promise.all([
+                      fetchInfoOnlyData(),
+                      readAdminMigrationState(),
+                      fetchCandidatesData(),
+                    ]);
+                  setCache("info", infoFetched);
+                  setCache("candidates", candidatesFetched);
+                  setDisplayInactive(infoFetched.inactiveTime);
+                  setMigrationPhase(migrationStatus.phase);
                 } catch (e) {
                   setError(e.message || String(e));
                 } finally {

@@ -1,49 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
 import RefreshBar from "../components/RefreshBar.jsx";
 import MissingMigrationDataBanner from "../components/MissingMigrationDataBanner.jsx";
-import { getCache, getCacheMeta, setCache } from "../services/cache.js";
+import { setCache, useCacheState } from "../services/cache.js";
 import {
   addCandidateWithMigration,
   candidatesMissingMigrationData,
   syncCandidateMigrationKeys,
 } from "../services/adminSuccession.js";
-import { hasMigrationData } from "../services/crypto/notesMigration.js";
-import { bytesToBuffer } from "../services/crypto/codec.js";
+import { fetchCandidatesData } from "../services/stellar/candidatesList.js";
 import {
-  getCandidate,
-  listCandidates,
   removeCandidate,
   updateCandidate,
 } from "../services/stellar/candidates.js";
-import { getInactiveTime } from "../services/stellar/inheritable.js";
 import { formatDuration, SECONDS_PER_YEAR } from "../utils/formatDuration.js";
 
 const DEFAULT_WAITING_TIME = String(SECONDS_PER_YEAR);
 
-async function fetchCandidatesData() {
-  const [addrs, inactiveTime] = await Promise.all([
-    listCandidates(),
-    getInactiveTime(),
-  ]);
-  const items = await Promise.all(
-    addrs.map(async (addr) => {
-      const info = await getCandidate(addr);
-      const remaining = Math.max(0, Number(info.waiting_time) - Number(inactiveTime));
-      const hasPreKey = hasMigrationData(bytesToBuffer(info.migration_data));
-      return {
-        address: addr,
-        waitingTime: info.waiting_time,
-        remaining,
-        hasPreKey,
-      };
-    }),
-  );
-  return { items, inactiveTime };
-}
-
 export default function CandidatesTab({ publicKey, isActive = true }) {
-  const [data, setData] = useState(() => getCache("candidates"));
-  const [meta, setMeta] = useState(() => getCacheMeta("candidates"));
+  const [data, meta] = useCacheState("candidates");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -53,25 +27,28 @@ export default function CandidatesTab({ publicKey, isActive = true }) {
   const [editAddr, setEditAddr] = useState("");
   const [editWait, setEditWait] = useState(DEFAULT_WAITING_TIME);
 
+  const loadCandidates = useCallback(async () => {
+    const fetched = await fetchCandidatesData();
+    setCache("candidates", fetched);
+    return fetched;
+  }, []);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const fetched = await fetchCandidatesData();
-      setCache("candidates", fetched);
-      setData(fetched);
-      setMeta(getCacheMeta("candidates"));
+      await loadCandidates();
     } catch (e) {
       setError(e.message || String(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadCandidates]);
 
-  // Refresh on first load and whenever the user opens this tab (post-succession PRE status).
+  // First open (or after invalidate): load once. Switching tabs while loaded does not re-fetch.
   useEffect(() => {
-    if (isActive) refresh();
-  }, [isActive, refresh]);
+    if (isActive && !meta.loaded) refresh();
+  }, [isActive, meta.loaded, refresh]);
 
   async function runAction(action, successMessage) {
     setLoading(true);
@@ -79,9 +56,8 @@ export default function CandidatesTab({ publicKey, isActive = true }) {
     setSuccess("");
     try {
       await action();
-      setSuccess(
-        successMessage || "Transaction submitted. Click Refresh to update the list.",
-      );
+      await loadCandidates();
+      setSuccess(successMessage || "Updated.");
     } catch (e) {
       setError(e.message || String(e));
     } finally {
@@ -119,7 +95,7 @@ export default function CandidatesTab({ publicKey, isActive = true }) {
               Number(newWait),
             );
             setNewAddr("");
-          })}
+          }, "Candidate added.")}
         >
           Add Candidate
         </button>
@@ -151,7 +127,12 @@ export default function CandidatesTab({ publicKey, isActive = true }) {
         <button
           type="button"
           disabled={loading || !editAddr}
-          onClick={() => runAction(() => updateCandidate(publicKey, editAddr, Number(editWait)))}
+          onClick={() =>
+            runAction(
+              () => updateCandidate(publicKey, editAddr, Number(editWait)),
+              "Waiting time updated.",
+            )
+          }
         >
           Update Waiting Time
         </button>
@@ -170,11 +151,10 @@ export default function CandidatesTab({ publicKey, isActive = true }) {
           type="button"
           disabled={loading || !data?.items?.length}
           onClick={() =>
-            runAction(async () => {
-              const result = await syncCandidateMigrationKeys();
-              await refresh();
-              return result;
-            }, "Rewrote PRE keys. List refreshed.")
+            runAction(
+              () => syncCandidateMigrationKeys(),
+              "Rewrote PRE keys. List refreshed.",
+            )
           }
         >
           Re-sync All PRE Keys
@@ -202,7 +182,12 @@ export default function CandidatesTab({ publicKey, isActive = true }) {
                       type="button"
                       className="danger"
                       disabled={loading}
-                      onClick={() => runAction(() => removeCandidate(publicKey, c.address))}
+                      onClick={() =>
+                        runAction(
+                          () => removeCandidate(publicKey, c.address),
+                          "Candidate removed.",
+                        )
+                      }
                     >
                       Remove
                     </button>
