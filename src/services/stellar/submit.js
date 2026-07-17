@@ -8,6 +8,7 @@ import {
 import { AssembledTransaction } from "@stellar/stellar-sdk/contract";
 import { Api } from "@stellar/stellar-sdk/rpc";
 import { getContext } from "./context.js";
+import { ensureAssembledSimReady, isRestoreNeeded, promptAndRestoreIfNeeded } from "./restore.js";
 import { getSessionSigner } from "./signer.js";
 import { getSessionKeypair } from "../session.js";
 
@@ -57,6 +58,11 @@ async function signAssembledTransaction(tx, signTransaction, networkPassphrase) 
 export function assertSimulation(tx) {
   if (!tx.simulation || Api.isSimulationError(tx.simulation)) {
     throw new Error(tx.simulation?.error || "simulation missing");
+  }
+  if (isRestoreNeeded(tx.simulation)) {
+    throw new Error(
+      "Contract state needs restore before this transaction can continue",
+    );
   }
 }
 
@@ -279,13 +285,23 @@ export async function signAllRequiredAuthEntries(tx, { contractAccountId, adminA
 
     await tx.simulate();
 
-    if (tx.simulation && !Api.isSimulationError(tx.simulation)) {
+    if (tx.simulation && isRestoreNeeded(tx.simulation)) {
+      await promptAndRestoreIfNeeded(tx.simulation, { publicKey: sessionPublicKey });
+      await tx.simulate();
+    }
+
+    if (tx.simulation && !Api.isSimulationError(tx.simulation) && !isRestoreNeeded(tx.simulation)) {
       expiration = tx.simulation.latestLedger + 60;
     }
 
     if (collectUnsignedAuthSubjects(tx).length === 0) {
       if (tx.simulation && Api.isSimulationError(tx.simulation)) {
         throw new Error(tx.simulation.error || "simulation failed after auth signing");
+      }
+      if (tx.simulation && isRestoreNeeded(tx.simulation)) {
+        throw new Error(
+          "Contract state still needs restore after auth signing simulation",
+        );
       }
       return;
     }
@@ -324,7 +340,7 @@ export async function buildSimulatedTx({
           Number(timebounds.maxTime) - Math.floor(Date.now() / 1000),
         );
 
-  const tx = await AssembledTransaction.build({
+  const buildOpts = {
     contractId,
     method,
     args,
@@ -334,7 +350,12 @@ export async function buildSimulatedTx({
     fee: BASE_FEE,
     parseResultXdr: parseResultXdr ?? ((r) => r),
     timeoutInSeconds: relativeTimeout,
-  });
+  };
+
+  const tx = await ensureAssembledSimReady(
+    () => AssembledTransaction.build(buildOpts),
+    { publicKey },
+  );
   assertSimulation(tx);
 
   if (timebounds && tx.built) {

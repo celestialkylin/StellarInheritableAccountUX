@@ -1,7 +1,8 @@
 import { Address, Operation, scValToNative, TransactionBuilder } from "@stellar/stellar-sdk";
 import { Api, assembleTransaction } from "@stellar/stellar-sdk/rpc";
 import { getContext } from "./context.js";
-import { getSessionKeypair } from "../session.js";
+import { ensureRpcSimReady } from "./restore.js";
+import { getSessionKeypair, getSessionPublicKey } from "../session.js";
 import {
   collectAuthSubjects,
   collectUnsignedAuthSubjects,
@@ -367,21 +368,13 @@ export function formatSimReturnValue(simulation) {
  * @returns {Promise<{ xdr: string, returnValueText: string, returnValue: unknown }>}
  */
 export async function simulateTxXdr(xdrBase64) {
-  const { rpc } = getContext();
   const tx = parseTxXdr(xdrBase64);
   if (!extractInvokeInfo(tx).isContractInvoke) {
     throw new Error("Simulation requires a Soroban invokeHostFunction transaction");
   }
 
-  const simulation = await rpc.simulateTransaction(tx);
-  if (Api.isSimulationError(simulation)) {
-    throw new Error(simulation.error || "simulation failed");
-  }
-  if (Api.isSimulationRestore(simulation)) {
-    throw new Error(
-      "Contract state needs restore before this transaction can be simulated successfully",
-    );
-  }
+  const publicKey = getSessionPublicKey() ?? undefined;
+  const simulation = await ensureRpcSimReady(tx, { publicKey });
 
   const { text: returnValueText, native: returnValue } = formatSimReturnValue(simulation);
   const assembled = assembleTransaction(tx, simulation).build();

@@ -1,7 +1,8 @@
 import { Asset, nativeToScVal, scValToNative } from "@stellar/stellar-sdk";
 import { AssembledTransaction } from "@stellar/stellar-sdk/contract";
-import { Api } from "@stellar/stellar-sdk/rpc";
 import { getContext } from "./context.js";
+import { ensureAssembledSimReady } from "./restore.js";
+import { getSessionPublicKey } from "../session.js";
 import { submitAsContractAccount, submitContractCall } from "./submit.js";
 
 const decimalsCache = new Map();
@@ -48,19 +49,26 @@ export function resolveTokenRef(asset, networkPassphrase) {
 
 async function simulateRead(contractId, method, args) {
   const { config } = getContext();
-  const tx = await AssembledTransaction.build({
-    contractId,
-    method,
-    args,
-    networkPassphrase: config.networkPassphrase,
-    rpcUrl: config.rpcUrl,
-    parseResultXdr: scValToNative,
-  });
-  if (!tx.simulation || Api.isSimulationError(tx.simulation)) {
-    const err = tx.simulation?.error || "simulation failed";
+  const publicKey = getSessionPublicKey() ?? undefined;
+  try {
+    const tx = await ensureAssembledSimReady(
+      () =>
+        AssembledTransaction.build({
+          contractId,
+          method,
+          args,
+          networkPassphrase: config.networkPassphrase,
+          rpcUrl: config.rpcUrl,
+          publicKey,
+          parseResultXdr: scValToNative,
+        }),
+      { publicKey },
+    );
+    return tx.result;
+  } catch (e) {
+    const err = e?.message || String(e);
     throw new Error(`SEP-41 ${method} failed for ${contractId}: ${err}`);
   }
-  return tx.result;
 }
 
 export async function getDecimals(tokenRef) {

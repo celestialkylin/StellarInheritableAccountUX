@@ -1,18 +1,26 @@
 import { scValToNative, nativeToScVal } from "@stellar/stellar-sdk";
 import { AssembledTransaction } from "@stellar/stellar-sdk/contract";
 import { getContext } from "./context.js";
+import { ensureAssembledSimReady } from "./restore.js";
+import { getSessionPublicKey } from "../session.js";
 import { submitContractCall } from "./submit.js";
 
 async function readContract(method, args = []) {
   const { config, contractId } = getContext();
-  const tx = await AssembledTransaction.build({
-    contractId,
-    method,
-    args,
-    networkPassphrase: config.networkPassphrase,
-    rpcUrl: config.rpcUrl,
-    parseResultXdr: scValToNative,
-  });
+  const publicKey = getSessionPublicKey() ?? undefined;
+  const tx = await ensureAssembledSimReady(
+    () =>
+      AssembledTransaction.build({
+        contractId,
+        method,
+        args,
+        networkPassphrase: config.networkPassphrase,
+        rpcUrl: config.rpcUrl,
+        publicKey,
+        parseResultXdr: scValToNative,
+      }),
+    { publicKey },
+  );
   return tx.result;
 }
 
