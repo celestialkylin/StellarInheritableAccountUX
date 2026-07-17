@@ -81,7 +81,11 @@ export default function MainTabs({ publicKey, config, onLogout }) {
           <div className="main-content">
             {mountedTabs.has("info") && (
               <div className="tab-panel" hidden={active !== "info"}>
-                <InfoTab publicKey={publicKey} />
+                <InfoTab
+                  publicKey={publicKey}
+                  isActive={active === "info"}
+                  onGoToCandidates={() => selectTab("candidates")}
+                />
               </div>
             )}
             {mountedTabs.has("ops") && (
@@ -96,7 +100,7 @@ export default function MainTabs({ publicKey, config, onLogout }) {
             )}
             {mountedTabs.has("candidates") && (
               <div className="tab-panel" hidden={active !== "candidates"}>
-                <CandidatesTab publicKey={publicKey} />
+                <CandidatesTab publicKey={publicKey} isActive={active === "candidates"} />
               </div>
             )}
             {mountedTabs.has("notes") && (

@@ -78,7 +78,7 @@ export async function migrateNotes(publicKey, upserts) {
   });
 }
 
-/** Advance NotesPending → CandidateRkPending after all note batches are done. */
+/** Mark note re-encryption complete and clear admin migration state (Idle). */
 export async function completeNotesMigration(publicKey) {
   return submitContractCall({
     contractId: getContext().contractId,

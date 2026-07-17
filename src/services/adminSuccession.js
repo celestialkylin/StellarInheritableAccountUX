@@ -1,19 +1,18 @@
 import { bytesToBuffer } from "./crypto/codec.js";
 import {
   migrationInProgress,
-  migrationNeedsCandidateRk,
   migrationNeedsNotes,
   parseAdminMigrationStatus,
 } from "./crypto/migrationStatus.js";
 import {
   encodeMigrationData,
+  hasMigrationData,
   migrateEncryptedField,
 } from "./crypto/notesMigration.js";
 import { decryptField } from "./crypto/notesCrypto.js";
 import { getSessionKeypair } from "./session.js";
 import { addCandidate, updateCandidatesMigrationData } from "./stellar/candidates.js";
 import {
-  finishAdminMigration,
   getAdminMigrationStatus,
   listCandidates,
 } from "./stellar/inheritable.js";
@@ -37,6 +36,19 @@ export async function addCandidateWithMigration(publicKey, candidateAddress, wai
 export async function readAdminMigrationState() {
   const raw = await getAdminMigrationStatus();
   return parseAdminMigrationStatus(raw);
+}
+
+/**
+ * True when any listed candidate lacks a valid PRE migration_data payload.
+ * @param {{ hasPreKey?: boolean, migration_data?: unknown }[]} items
+ */
+export function candidatesMissingMigrationData(items) {
+  if (!Array.isArray(items) || items.length === 0) return false;
+  return items.some((c) => {
+    if (typeof c.hasPreKey === "boolean") return !c.hasPreKey;
+    if (c.migration_data != null) return !hasMigrationData(bytesToBuffer(c.migration_data));
+    return true;
+  });
 }
 
 /**
@@ -136,12 +148,18 @@ async function syncRemainingCandidateRks(publicKey) {
   return updates.length;
 }
 
+/** Manual re-provision of PRE keys for all registered candidates (Candidates tab). */
 export async function syncCandidateMigrationKeys() {
   const adminKeypair = getSessionKeypair();
   const updated = await syncRemainingCandidateRks(adminKeypair.publicKey());
   return { updated };
 }
 
+/**
+ * Complete pending notes migration after claim/set_admin.
+ * Notes only: complete_notes_migration clears on-chain migration state.
+ * Candidate PRE re-sync is a separate manual step on the Candidates tab.
+ */
 export async function migrateNotesAfterAdminChange(publicKey) {
   const newAdminKeypair = getSessionKeypair();
   if (newAdminKeypair.publicKey() !== publicKey) {
@@ -155,7 +173,6 @@ export async function migrateNotesAfterAdminChange(publicKey) {
 
   let notesMigrated = 0;
   let batches = 0;
-  let candidateRksSynced = false;
 
   if (migrationNeedsNotes(status)) {
     const upserts = await buildNoteMigrationUpserts(status.migrationData);
@@ -172,13 +189,6 @@ export async function migrateNotesAfterAdminChange(publicKey) {
     status = await readAdminMigrationState();
   }
 
-  if (migrationNeedsCandidateRk(status)) {
-    await syncRemainingCandidateRks(publicKey);
-    await finishAdminMigration(publicKey);
-    candidateRksSynced = true;
-    status = await readAdminMigrationState();
-  }
-
   if (migrationInProgress(status)) {
     throw new Error(`Admin migration incomplete (phase: ${status.phase})`);
   }
@@ -188,7 +198,6 @@ export async function migrateNotesAfterAdminChange(publicKey) {
     batches,
     skipped: false,
     phase: "idle",
-    candidateRksSynced,
   };
 }
 
@@ -196,19 +205,10 @@ export function formatMigrationResult(result) {
   if (result.skipped) {
     return "No pending migration data found.";
   }
-  const parts = [];
   if (result.migrated > 0) {
     const batchPart =
       result.batches > 1 ? ` in ${result.batches} batch(es)` : "";
-    parts.push(`Migrated ${result.migrated} note(s)${batchPart}`);
-  } else if (result.batches === 0 && result.candidateRksSynced) {
-    // zero notes still completed notes phase
+    return `Migrated ${result.migrated} note(s)${batchPart}.`;
   }
-  if (result.candidateRksSynced) {
-    parts.push("refreshed candidate PRE keys");
-  }
-  if (parts.length === 0) {
-    return "Migration completed.";
-  }
-  return `${parts.join(" and ")}.`;
+  return "Migration completed.";
 }

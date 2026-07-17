@@ -53,7 +53,8 @@ Notes (short summaries and longer bodies) are stored on chain as **ciphertext on
 - Notes are encrypted to the admin’s **PRE public key** (`pre_pk`), derived via HKDF from their Stellar **`S…` seed**—not from the public `G…` address.
 - Only the holder of that secret can decrypt original note ciphertext.
 - When you add a candidate, the app stores a **re-encryption key** (`migration_data`) on chain: admin `pre_sk` + candidate **`G…`**. A proxy (or the heir’s client) can re-encrypt notes for that heir without learning plaintext; the heir decrypts re-encrypted data with their **`S…`**.
-- After admin transfer / claim, the new admin migrates notes (re-encrypt → decrypt as heir → re-wrap under the new admin’s `pre_pk`).
+- After admin **claim** or **transfer**, the new admin migrates **notes only** (re-encrypt → decrypt as heir → re-wrap under the new admin’s `pre_pk`). The contract also **clears remaining candidates’** `migration_data` so the new admin can review who should stay eligible, then re-publish PRE keys via **Candidates → Re-sync All PRE Keys**.
+- **Transfer admin** requires the target to already be a registered candidate **with** valid `migration_data`; the app blocks transfer when PRE keys are missing.
 
 - **Admin** can create and read notes in the **Notes** tab while controlling the account.
 - Provisioned candidates can **in principle** decrypt notes (with `migration_data` + their secret) without claiming—this UI has no notes viewer in candidate mode.
@@ -111,7 +112,7 @@ You can **Save Template** / **Load Template** (desktop app) so common argument s
 1. Unlock with **your** key (you should already be registered as a candidate).
 2. Check inactivity and whether you can claim yet.
 3. When the waiting time is met, **Claim Admin**—no action required from the previous admin.
-4. After a successful claim you become admin in this app and can use the full workspace (including notes and candidate management).
+4. After a successful claim you become admin; the app completes any pending **note** migration. Remaining candidates keep their places but lose PRE keys—review the list and re-sync migration data before treating them as provisioned again.
 
 ## Things to keep in mind
 

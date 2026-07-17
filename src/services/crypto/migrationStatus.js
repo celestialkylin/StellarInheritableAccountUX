@@ -1,6 +1,6 @@
 import { bytesToBuffer } from "./codec.js";
 
-/** @typedef {"idle" | "notes_pending" | "candidate_rk_pending"} MigrationPhase */
+/** @typedef {"idle" | "notes_pending"} MigrationPhase */
 
 /**
  * Normalize `get_admin_migration_status` result from scValToNative.
@@ -12,12 +12,10 @@ export function parseAdminMigrationStatus(raw) {
   }
 
   if (typeof raw === "string") {
-    if (raw === "CandidateRkPending") {
-      return { phase: "candidate_rk_pending", migrationData: Buffer.alloc(0) };
-    }
     if (raw === "NotesPending") {
       return { phase: "notes_pending", migrationData: Buffer.alloc(0) };
     }
+    // Legacy CandidateRkPending (or unknown) → idle; notes migration is the only active phase.
     return { phase: "idle", migrationData: Buffer.alloc(0) };
   }
 
@@ -28,9 +26,6 @@ export function parseAdminMigrationStatus(raw) {
         phase: "notes_pending",
         migrationData: bytesToBuffer(value ?? []),
       };
-    }
-    if (tag === "CandidateRkPending" || tag === 1) {
-      return { phase: "candidate_rk_pending", migrationData: Buffer.alloc(0) };
     }
     return { phase: "idle", migrationData: Buffer.alloc(0) };
   }
@@ -49,9 +44,6 @@ export function parseAdminMigrationStatus(raw) {
         migrationData: bytesToBuffer(raw.values?.[0] ?? []),
       };
     }
-    if ("CandidateRkPending" in raw || raw.tag === "CandidateRkPending") {
-      return { phase: "candidate_rk_pending", migrationData: Buffer.alloc(0) };
-    }
     if (raw.tag === "Idle" || "Idle" in raw) {
       return { phase: "idle", migrationData: Buffer.alloc(0) };
     }
@@ -66,8 +58,4 @@ export function migrationInProgress(status) {
 
 export function migrationNeedsNotes(status) {
   return status.phase === "notes_pending";
-}
-
-export function migrationNeedsCandidateRk(status) {
-  return status.phase === "candidate_rk_pending";
 }

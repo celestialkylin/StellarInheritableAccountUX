@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import RefreshBar from "../components/RefreshBar.jsx";
+import MissingMigrationDataBanner from "../components/MissingMigrationDataBanner.jsx";
 import { getCache, getCacheMeta, setCache } from "../services/cache.js";
 import {
   addCandidateWithMigration,
+  candidatesMissingMigrationData,
   syncCandidateMigrationKeys,
 } from "../services/adminSuccession.js";
 import { hasMigrationData } from "../services/crypto/notesMigration.js";
@@ -39,7 +41,7 @@ async function fetchCandidatesData() {
   return { items, inactiveTime };
 }
 
-export default function CandidatesTab({ publicKey }) {
+export default function CandidatesTab({ publicKey, isActive = true }) {
   const [data, setData] = useState(() => getCache("candidates"));
   const [meta, setMeta] = useState(() => getCacheMeta("candidates"));
   const [loading, setLoading] = useState(false);
@@ -66,17 +68,20 @@ export default function CandidatesTab({ publicKey }) {
     }
   }, []);
 
+  // Refresh on first load and whenever the user opens this tab (post-succession PRE status).
   useEffect(() => {
-    if (!meta.loaded) refresh();
-  }, [meta.loaded, refresh]);
+    if (isActive) refresh();
+  }, [isActive, refresh]);
 
-  async function runAction(action) {
+  async function runAction(action, successMessage) {
     setLoading(true);
     setError("");
     setSuccess("");
     try {
       await action();
-      setSuccess("Transaction submitted. Click Refresh to update the list.");
+      setSuccess(
+        successMessage || "Transaction submitted. Click Refresh to update the list.",
+      );
     } catch (e) {
       setError(e.message || String(e));
     } finally {
@@ -84,11 +89,16 @@ export default function CandidatesTab({ publicKey }) {
     }
   }
 
+  const showMissingMigrationBanner = candidatesMissingMigrationData(data?.items ?? []);
+
   return (
     <div>
       <RefreshBar onRefresh={refresh} loading={loading} fetchedAt={meta.fetchedAt} />
       {error && <div className="error">{error}</div>}
       {success && <div className="success">{success}</div>}
+      {showMissingMigrationBanner && (
+        <MissingMigrationDataBanner variant="candidates" />
+      )}
 
       <div className="card">
         <h3>Add Candidate</h3>
@@ -150,17 +160,22 @@ export default function CandidatesTab({ publicKey }) {
       <div className="card">
         <h3>Re-sync PRE Keys</h3>
         <p className="meta">
-          New candidates receive a re-encryption key automatically when added. Use this to rewrite
-          keys for all registered candidates (e.g. corrupted or missing migration data). A rekey alone
-          cannot open notes without the candidate&apos;s secret key; see README for collusion notes.
+          New candidates receive a re-encryption key automatically when added. After admin
+          claim or transfer, the contract clears remaining candidates&apos; migration_data so
+          the new admin can review who should stay eligible. Remove or adjust heirs first if
+          needed, then use this to publish fresh PRE keys for everyone still on the list
+          (also useful if keys are corrupted or missing).
         </p>
         <button
           type="button"
           disabled={loading || !data?.items?.length}
-          onClick={() => runAction(async () => {
-            const result = await syncCandidateMigrationKeys();
-            setSuccess(`Rewrote PRE keys for ${result.updated} candidate(s). Click Refresh.`);
-          })}
+          onClick={() =>
+            runAction(async () => {
+              const result = await syncCandidateMigrationKeys();
+              await refresh();
+              return result;
+            }, "Rewrote PRE keys. List refreshed.")
+          }
         >
           Re-sync All PRE Keys
         </button>
@@ -173,7 +188,7 @@ export default function CandidatesTab({ publicKey }) {
         ) : (
           <table>
             <thead>
-              <tr><th>Address</th><th>Waiting</th><th>To Claim</th><th>RK</th><th></th></tr>
+              <tr><th>Address</th><th>Waiting</th><th>To Claim</th><th>PRE</th><th></th></tr>
             </thead>
             <tbody>
               {data.items.map((c) => (

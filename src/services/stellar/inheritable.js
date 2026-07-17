@@ -1,14 +1,7 @@
-import { scValToNative, nativeToScVal, xdr } from "@stellar/stellar-sdk";
+import { scValToNative, nativeToScVal } from "@stellar/stellar-sdk";
 import { AssembledTransaction } from "@stellar/stellar-sdk/contract";
-import { Buffer } from "buffer";
-import { bytesToBuffer } from "../crypto/codec.js";
 import { getContext } from "./context.js";
 import { submitContractCall } from "./submit.js";
-
-function toContractBytes(value) {
-  const buf = bytesToBuffer(value);
-  return xdr.ScVal.scvBytes(Buffer.from(buf));
-}
 
 async function readContract(method, args = []) {
   const { config, contractId } = getContext();
@@ -61,24 +54,12 @@ export async function claimAdmin(publicKey) {
   });
 }
 
-export function setAdmin(publicKey, newAdmin, migrationData) {
+/** Transfer admin to an existing candidate. Contract uses that candidate's migration_data. */
+export function setAdmin(publicKey, newAdmin) {
   return submitContractCall({
     contractId: getContext().contractId,
     method: "set_admin",
-    args: [
-      nativeToScVal(newAdmin, { type: "address" }),
-      toContractBytes(migrationData),
-    ],
-    publicKey,
-    parseResultXdr: scValToNative,
-  });
-}
-
-export function finishAdminMigration(publicKey) {
-  return submitContractCall({
-    contractId: getContext().contractId,
-    method: "finish_admin_migration",
-    args: [],
+    args: [nativeToScVal(newAdmin, { type: "address" })],
     publicKey,
     parseResultXdr: scValToNative,
   });

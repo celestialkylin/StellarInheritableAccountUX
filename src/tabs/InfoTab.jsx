@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import RefreshBar from "../components/RefreshBar.jsx";
+import MissingMigrationDataBanner from "../components/MissingMigrationDataBanner.jsx";
 import { getCache, getCacheMeta, setCache } from "../services/cache.js";
 import { getContext } from "../services/stellar/context.js";
 import {
-  buildMigrationDataForAddress,
+  candidatesMissingMigrationData,
   formatMigrationResult,
   migrateNotesAfterAdminChange,
   readAdminMigrationState,
 } from "../services/adminSuccession.js";
-import {
-  migrationInProgress,
-  migrationNeedsNotes,
-} from "../services/crypto/migrationStatus.js";
+import { migrationInProgress } from "../services/crypto/migrationStatus.js";
+import { hasMigrationData } from "../services/crypto/notesMigration.js";
+import { bytesToBuffer } from "../services/crypto/codec.js";
 import {
   checkIn,
   getAdmin,
@@ -46,7 +46,13 @@ async function fetchInfoData() {
     candidateAddrs.map(async (addr) => {
       const info = await getCandidate(addr);
       const remaining = Math.max(0, Number(info.waiting_time) - Number(inactiveTime));
-      return { address: addr, waitingTime: info.waiting_time, remaining };
+      const hasPreKey = hasMigrationData(bytesToBuffer(info.migration_data));
+      return {
+        address: addr,
+        waitingTime: info.waiting_time,
+        remaining,
+        hasPreKey,
+      };
     }),
   );
 
@@ -66,7 +72,7 @@ async function fetchInfoData() {
   return { admin, lastActivity, inactiveTime, candidates, balances };
 }
 
-export default function InfoTab({ publicKey }) {
+export default function InfoTab({ publicKey, onGoToCandidates, isActive = true }) {
   const [data, setData] = useState(() => getCache("info"));
   const [meta, setMeta] = useState(() => getCacheMeta("info"));
   const [loading, setLoading] = useState(false);
@@ -89,6 +95,9 @@ export default function InfoTab({ publicKey }) {
       setMeta(getCacheMeta("info"));
       setDisplayInactive(fetched.inactiveTime);
       setMigrationPhase(migrationStatus.phase);
+      setTransferAddr((prev) =>
+        prev && !fetched.candidates.some((c) => c.address === prev) ? "" : prev,
+      );
     } catch (e) {
       setError(e.message || String(e));
     } finally {
@@ -96,9 +105,10 @@ export default function InfoTab({ publicKey }) {
     }
   }, []);
 
+  // Home after unlock and when returning to Info: re-check empty migration_data banner.
   useEffect(() => {
-    if (!meta.loaded) refresh();
-  }, [meta.loaded, refresh]);
+    if (isActive) refresh();
+  }, [isActive, refresh]);
 
   useEffect(() => {
     if (!data?.lastActivity) return;
@@ -111,16 +121,35 @@ export default function InfoTab({ publicKey }) {
     return () => clearInterval(timer);
   }, [data, meta.fetchedAt]);
 
+  const selectedCandidate = useMemo(() => {
+    if (!transferAddr || !data?.candidates) return null;
+    return data.candidates.find((c) => c.address === transferAddr) ?? null;
+  }, [transferAddr, data?.candidates]);
+
+  const transferBlockedNoPre =
+    Boolean(selectedCandidate) && !selectedCandidate.hasPreKey;
+  const canTransfer =
+    Boolean(selectedCandidate?.hasPreKey) && !loading;
+
+  const showMissingMigrationBanner = candidatesMissingMigrationData(
+    data?.candidates ?? [],
+  );
+
   return (
     <div>
       <RefreshBar onRefresh={refresh} loading={loading} fetchedAt={meta.fetchedAt} />
       {error && <div className="error">{error}</div>}
       {success && <div className="success">{success}</div>}
+      {showMissingMigrationBanner && (
+        <MissingMigrationDataBanner
+          onGoToCandidates={onGoToCandidates}
+          variant="info"
+        />
+      )}
       {migrationInProgress({ phase: migrationPhase }) && (
         <div className="warning">
-          {migrationNeedsNotes({ phase: migrationPhase })
-            ? "Admin migration in progress: note re-encryption is pending (batched; safe to continue after interruption). The migration key is stored on chain."
-            : "Admin migration in progress: candidate PRE key sync is pending."}
+          Admin migration in progress: note re-encryption is pending (batched; safe to
+          continue after interruption). The migration key is stored on chain.
           <div className="row-actions mt-075">
             <button
               type="button"
@@ -140,9 +169,7 @@ export default function InfoTab({ publicKey }) {
                 }
               }}
             >
-              {migrationNeedsNotes({ phase: migrationPhase })
-                ? "Continue / Complete Note Migration"
-                : "Complete Candidate RK Sync"}
+              Continue / Complete Note Migration
             </button>
           </div>
         </div>
@@ -203,7 +230,12 @@ export default function InfoTab({ publicKey }) {
             ) : (
               <table>
                 <thead>
-                  <tr><th>Address</th><th>Waiting Time</th><th>Time to Claim</th></tr>
+                  <tr>
+                    <th>Address</th>
+                    <th>Waiting Time</th>
+                    <th>Time to Claim</th>
+                    <th>PRE</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {data.candidates.map((c) => (
@@ -215,6 +247,11 @@ export default function InfoTab({ publicKey }) {
                           ? <span className="badge admin">Ready</span>
                           : formatDuration(c.remaining)}
                       </td>
+                      <td>
+                        {c.hasPreKey
+                          ? <span className="badge admin">Set</span>
+                          : <span className="meta">—</span>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -225,25 +262,57 @@ export default function InfoTab({ publicKey }) {
           <div className="card">
             <h3>Transfer Admin</h3>
             <p className="meta">
-              Immediately assign a new admin and store migration data for note re-encryption.
+              Immediately assign a registered candidate as the new admin. The contract
+              uses that candidate&apos;s existing <code>migration_data</code> for note
+              re-encryption. Remaining candidates keep their places but lose PRE keys
+              until you re-sync them on the Candidates tab.
             </p>
-            <label>New Admin Address (G…)</label>
-            <input
+            <label>New Admin (must be a candidate)</label>
+            <select
               value={transferAddr}
               onChange={(e) => setTransferAddr(e.target.value)}
-              placeholder="G…"
-            />
+              disabled={loading || data.candidates.length === 0}
+            >
+              <option value="">— select candidate —</option>
+              {data.candidates.map((c) => (
+                <option key={c.address} value={c.address}>
+                  {c.address}
+                  {c.hasPreKey ? " (PRE set)" : " (no PRE)"}
+                </option>
+              ))}
+            </select>
+            {transferBlockedNoPre && (
+              <div className="warning mt-075">
+                This candidate has no migration_data (PRE key). Re-sync PRE keys on the
+                Candidates tab (or re-add the candidate) before transferring admin.
+                {typeof onGoToCandidates === "function" && (
+                  <div className="row-actions mt-075">
+                    <button type="button" className="secondary" onClick={onGoToCandidates}>
+                      Go to Candidates
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             <button
               type="button"
-              disabled={loading || !transferAddr.trim()}
+              disabled={!canTransfer}
               onClick={async () => {
+                if (!selectedCandidate?.hasPreKey) {
+                  setError(
+                    "Cannot transfer admin: selected candidate has no migration_data (PRE key).",
+                  );
+                  return;
+                }
                 setLoading(true);
                 setError("");
                 setSuccess("");
                 try {
-                  const migrationData = await buildMigrationDataForAddress(transferAddr.trim());
-                  await setAdmin(publicKey, transferAddr.trim(), migrationData);
-                  setSuccess("Admin transfer submitted. New admin should complete note migration after unlock.");
+                  await setAdmin(publicKey, transferAddr);
+                  setSuccess(
+                    "Admin transfer submitted. New admin should complete note migration after unlock.",
+                  );
+                  setTransferAddr("");
                 } catch (e) {
                   setError(e.message || String(e));
                 } finally {
